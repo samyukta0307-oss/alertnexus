@@ -1,0 +1,25 @@
+{
+  "name": "cybershield-soc-backend",
+  "version": "1.0.0",
+  "description": "CyberShield SOC Incident Prioritization & Response Engine Backend",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "migrate": "node src/scripts/migrate.js",
+    "seed": "node src/scripts/seedAlerts.js",
+    "demo:reset": "node src/scripts/resetDemo.js",
+    "demo:live-alert": "node src/scripts/simulateLiveAlert.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.12.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
+
