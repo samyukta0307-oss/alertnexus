@@ -1,27 +1,63 @@
 @import "tailwindcss";
 
+@theme {
+  --color-soc-base: #1c1921;
+  --color-soc-surface: #24202b;
+  --color-soc-card: #2d2736;
+  --color-soc-card-hover: #373042;
+  --color-soc-input: #1e1a24;
+
+  /* Primary Interactive Accent: Dusty Teal */
+  --color-soc-teal: #5ec8c0;
+  --color-soc-teal-hover: #4eb8b0;
+
+  /* Secondary Warm Accent: Soft Coral / Warm Amber */
+  --color-soc-warm: #e8a87c;
+  --color-soc-warm-hover: #f0a868;
+
+  /* Priority Tiers (Warm, softened danger & alert levels) */
+  --color-soc-p1: #e88080;
+  --color-soc-p2: #efa95f;
+  --color-soc-p3: #e8d290;
+  --color-soc-p4: #9aa5b1;
+
+  /* Success / Healthy State: Soft Sage Green */
+  --color-soc-sage: #8fbf9f;
+
+  /* Typography */
+  --color-soc-text: #f0eae4;
+  --color-soc-muted: #a69c93;
+  --color-soc-subtle: #7d736b;
+
+  /* Borders / Dividers */
+  --color-soc-border: rgba(255, 245, 235, 0.10);
+  --color-soc-border-prominent: rgba(255, 245, 235, 0.18);
+}
+
 @layer base {
   body {
-    @apply bg-[#0c0e12] text-slate-200 antialiased selection:bg-cyan-500/20 selection:text-cyan-300 font-sans;
+    background-color: var(--color-soc-base);
+    color: var(--color-soc-text);
+    @apply antialiased selection:bg-[#5ec8c0]/25 selection:text-[#5ec8c0] font-sans;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* Custom scrollbar styling for SOC dashboard */
+/* Custom scrollbar styling for warm-dark SOC dashboard */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d1117;
+  background: #1c1921;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #21262d;
+  background: #373042;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #30363d;
+  background: #473f55;
 }

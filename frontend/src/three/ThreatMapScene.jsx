@@ -2,7 +2,8 @@ import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { STAGE_COLORS, getStageColor } from './AttackChainScene';
+import { getStageColor } from './AttackChainScene';
+import { THEME } from '../utils/theme';
 
 /**
  * Camera Controller for Threat Map scene with automatic bounding-box auto-framing.
@@ -53,28 +54,39 @@ function ThreatCameraRig({ positions = [] }) {
 }
 
 /**
- * Center Primary Asset Node (Highest Criticality Crown Jewel)
+ * Primary Crown Jewel Center Node (Target Database or Core Server)
  */
-function CenterAssetNode({ asset, isContained, isSelected, onSelect }) {
-  const [hovered, setHovered] = useState(false);
+function CenterAssetNode({
+  asset,
+  isContained,
+  isSelected,
+  onSelect
+}) {
   const meshRef = useRef();
-  const pulseRef = useRef();
+  const [hovered, setHovered] = useState(false);
 
-  const radius = 0.95;
-
-  useFrame((state, delta) => {
-    if (pulseRef.current) {
-      pulseRef.current.rotation.z += delta * 0.8;
-    }
+  useFrame(({ clock }) => {
     if (meshRef.current) {
-      const targetScale = isSelected ? 1.25 : hovered ? 1.15 : 1.0;
-      meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 8);
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.y = t * 0.4;
+      meshRef.current.rotation.x = Math.sin(t * 0.5) * 0.1;
+
+      // Pulse animation if uncontained
+      if (!isContained) {
+        const pulse = 1.0 + Math.sin(t * 3.0) * 0.06;
+        meshRef.current.scale.set(pulse, pulse, pulse);
+      } else {
+        meshRef.current.scale.set(1.0, 1.0, 1.0);
+      }
     }
   });
 
+  const nodeColor = isContained ? THEME.sage : THEME.p1;
+  const radius = 1.1;
+
   return (
     <group position={[0, 0, 0]}>
-      {/* Center Crown Jewel Sphere */}
+      {/* 3D Center Sphere */}
       <mesh
         ref={meshRef}
         onClick={(e) => {
@@ -84,53 +96,43 @@ function CenterAssetNode({ asset, isContained, isSelected, onSelect }) {
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
-          document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={() => {
-          setHovered(false);
-          document.body.style.cursor = 'auto';
-        }}
+        onPointerOut={() => setHovered(false)}
       >
         <sphereGeometry args={[radius, 32, 32]} />
         <meshStandardMaterial
-          color={isContained ? '#10b981' : '#f43f5e'}
-          emissive={isContained ? '#059669' : '#e11d48'}
-          emissiveIntensity={isContained ? 0.6 : 0.8}
+          color={nodeColor}
+          emissive={nodeColor}
+          emissiveIntensity={isContained ? 0.3 : isSelected ? 0.8 : hovered ? 0.6 : 0.45}
           roughness={0.2}
           metalness={0.7}
         />
       </mesh>
 
-      {/* Pulsing Orbital Defense / Threat Ring */}
-      <group ref={pulseRef}>
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[radius * 1.35, radius * 1.55, 32]} />
-          <meshBasicMaterial
-            color={isContained ? '#10b981' : '#f43f5e'}
-            side={THREE.DoubleSide}
-            transparent
-            opacity={0.6}
-          />
-        </mesh>
-      </group>
+      {/* Target Asset Orbiting Ring */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[radius * 1.35, radius * 1.45, 48]} />
+        <meshBasicMaterial
+          color={isContained ? THEME.sage : THEME.p1}
+          side={THREE.DoubleSide}
+          transparent={true}
+          opacity={0.65}
+        />
+      </mesh>
 
-      {/* Center Asset Label */}
-      <Html position={[0, radius + 0.6, 0]} center distanceFactor={14} className="pointer-events-none select-none">
-        <div className="flex flex-col items-center">
-          <div className={`px-2.5 py-1 rounded-md border shadow-xl text-center backdrop-blur-md whitespace-nowrap font-mono ${
+      {/* HTML Annotation Tag */}
+      <Html position={[0, radius + 0.6, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+        <div
+          className={`px-2.5 py-1 rounded-md text-[10px] font-mono whitespace-nowrap transition-all duration-200 backdrop-blur-xs select-none ${
             isContained
-              ? 'bg-emerald-950/90 border-emerald-500/80 text-emerald-300'
-              : 'bg-[#0a0d12]/95 border-rose-500/80 text-rose-300 shadow-[0_0_16px_rgba(244,63,94,0.3)]'
-          }`}>
-            <div className="text-[9px] font-extrabold tracking-wider uppercase text-cyan-400">
-              PRIMARY ASSET (CRIT: {asset.criticality})
-            </div>
-            <div className="text-xs font-extrabold text-white">
-              {asset.name}
-            </div>
-            <div className="text-[9px] text-slate-400 font-semibold">
-              {isContained ? '🛡️ ISOLATED & CONTAINED' : asset.type || 'crown_jewel'}
-            </div>
+              ? 'bg-[#24202b]/95 text-[#8fbf9f] border border-[#8fbf9f]/40 shadow-md'
+              : 'bg-[#2d2736]/95 text-[#e88080] border border-[#e88080]/50 shadow-[0_0_16px_rgba(232,128,128,0.25)] font-bold'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${isContained ? 'bg-[#8fbf9f]' : 'bg-[#e88080] animate-pulse'}`} />
+            <span>{asset.name}</span>
+            <span className="text-[9px] text-[#a69c93]">({isContained ? 'ISOLATED' : 'PRIMARY'})</span>
           </div>
         </div>
       </Html>
@@ -139,7 +141,7 @@ function CenterAssetNode({ asset, isContained, isSelected, onSelect }) {
 }
 
 /**
- * Connected Outer Asset Node
+ * Outer Connected Downstream Asset Node
  */
 function ConnectedAssetNode({
   asset,
@@ -148,31 +150,23 @@ function ConnectedAssetNode({
   isSelected,
   onSelect
 }) {
-  const [hovered, setHovered] = useState(false);
   const meshRef = useRef();
-  const transitionRef = useRef(0); // 0 = active, 1 = contained
+  const [hovered, setHovered] = useState(false);
 
-  // Scale size based on asset criticality (range: 0.4 to 0.75)
-  const baseRadius = 0.4 + (Math.min(100, Math.max(0, asset.criticality || 50)) / 100) * 0.35;
-  const stageColor = getStageColor(asset.dominantStage);
-
-  useFrame((state, delta) => {
-    // Smooth containment animation lerp
-    const targetProgress = isContained ? 1.0 : 0.0;
-    transitionRef.current = THREE.MathUtils.lerp(transitionRef.current, targetProgress, delta * 4);
-
+  useFrame(({ clock }) => {
     if (meshRef.current) {
-      const scaleMultiplier = isContained ? 0.75 : isSelected ? 1.3 : hovered ? 1.15 : 1.0;
-      meshRef.current.scale.lerp(
-        new THREE.Vector3(scaleMultiplier, scaleMultiplier, scaleMultiplier),
-        delta * 8
-      );
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.y = t * 0.5;
     }
   });
 
+  const stageColor = getStageColor(asset.dominantStage);
+  const nodeColor = isContained ? THEME.p4 : stageColor || THEME.teal;
+  const radius = 0.6;
+
   return (
     <group position={position}>
-      {/* Outer Node Mesh */}
+      {/* 3D Box for Workstation / Server */}
       <mesh
         ref={meshRef}
         onClick={(e) => {
@@ -182,55 +176,32 @@ function ConnectedAssetNode({
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
-          document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={() => {
-          setHovered(false);
-          document.body.style.cursor = 'auto';
-        }}
+        onPointerOut={() => setHovered(false)}
       >
-        <sphereGeometry args={[baseRadius, 32, 32]} />
+        <boxGeometry args={[radius * 1.3, radius * 1.3, radius * 1.3]} />
         <meshStandardMaterial
-          color={isContained ? '#334155' : stageColor}
-          emissive={isContained ? '#0f172a' : isSelected || hovered ? stageColor : '#0f172a'}
-          emissiveIntensity={isContained ? 0.1 : isSelected ? 1.0 : hovered ? 0.8 : 0.25}
-          roughness={isContained ? 0.8 : 0.3}
-          metalness={isContained ? 0.1 : 0.5}
+          color={nodeColor}
+          emissive={nodeColor}
+          emissiveIntensity={isContained ? 0.15 : isSelected ? 0.7 : hovered ? 0.45 : 0.25}
+          roughness={0.3}
+          metalness={0.5}
         />
       </mesh>
 
-      {/* Isolated Muted Ring if Contained */}
-      {isContained && (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[baseRadius * 1.2, baseRadius * 1.35, 32]} />
-          <meshBasicMaterial color="#475569" side={THREE.DoubleSide} transparent opacity={0.6} />
-        </mesh>
-      )}
-
-      {/* Label */}
-      <Html position={[0, baseRadius + 0.45, 0]} center distanceFactor={14} className="pointer-events-none select-none">
-        <div className="flex flex-col items-center font-mono">
-          <div className={`px-2 py-0.5 rounded-md border text-center backdrop-blur-xs whitespace-nowrap ${
+      {/* HTML Annotation Tag */}
+      <Html position={[0, radius + 0.5, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+        <div
+          className={`px-2 py-0.5 rounded-md text-[9px] font-mono whitespace-nowrap transition-all backdrop-blur-xs select-none ${
             isContained
-              ? 'bg-[#0f172a]/90 border-slate-700 text-slate-400 line-through'
-              : 'bg-[#0a0d12]/90 border-slate-700/80 text-white'
-          }`}>
-            <div className="text-[9px] text-slate-400">
-              CRIT: {asset.criticality}
-            </div>
-            <div className="text-[10px] font-bold">
-              {asset.name}
-            </div>
+              ? 'bg-[#24202b]/90 text-[#9aa5b1] border border-white/5 opacity-70'
+              : 'bg-[#2d2736]/90 text-[#f0eae4] border border-[#5ec8c0]/40 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: nodeColor }} />
+            <span>{asset.name}</span>
           </div>
-          {isContained ? (
-            <span className="mt-0.5 text-[8px] font-bold px-1 rounded bg-slate-800 text-slate-400 border border-slate-700">
-              ISOLATED
-            </span>
-          ) : (
-            <span className="mt-0.5 text-[8px] font-bold px-1 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 uppercase">
-              {asset.dominantStage || 'touched'}
-            </span>
-          )}
         </div>
       </Html>
     </group>
@@ -238,18 +209,27 @@ function ConnectedAssetNode({
 }
 
 /**
- * Affected Users Blast Radius Node
+ * User Identity Accounts Octahedron Node
  */
-function AffectedUsersNode({ affectedUsers = 0, position, isContained, isSelected, onSelect }) {
-  const [hovered, setHovered] = useState(false);
+function AffectedUsersNode({
+  affectedUsers,
+  position,
+  isContained,
+  isSelected,
+  onSelect
+}) {
   const meshRef = useRef();
+  const [hovered, setHovered] = useState(false);
 
-  useFrame((state, delta) => {
+  useFrame(({ clock }) => {
     if (meshRef.current) {
-      const targetScale = isContained ? 0.7 : isSelected ? 1.25 : hovered ? 1.15 : 1.0;
-      meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 8);
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.y = t * 0.8;
+      meshRef.current.rotation.z = t * 0.3;
     }
   });
+
+  const nodeColor = isContained ? THEME.p4 : THEME.warm;
 
   return (
     <group position={position}>
@@ -262,34 +242,31 @@ function AffectedUsersNode({ affectedUsers = 0, position, isContained, isSelecte
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
-          document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={() => {
-          setHovered(false);
-          document.body.style.cursor = 'auto';
-        }}
+        onPointerOut={() => setHovered(false)}
       >
-        <octahedronGeometry args={[0.65, 0]} />
+        <octahedronGeometry args={[0.7, 0]} />
         <meshStandardMaterial
-          color={isContained ? '#334155' : '#c084fc'}
-          emissive={isContained ? '#0f172a' : '#9333ea'}
-          emissiveIntensity={isContained ? 0.1 : 0.6}
-          roughness={0.3}
+          color={nodeColor}
+          emissive={nodeColor}
+          emissiveIntensity={isContained ? 0.15 : isSelected ? 0.7 : hovered ? 0.5 : 0.3}
+          roughness={0.2}
           metalness={0.6}
         />
       </mesh>
 
-      <Html position={[0, 0.85, 0]} center distanceFactor={14} className="pointer-events-none select-none">
-        <div className={`px-2 py-0.5 rounded-md border text-center backdrop-blur-xs whitespace-nowrap font-mono ${
-          isContained
-            ? 'bg-[#0f172a]/90 border-slate-700 text-slate-400 line-through'
-            : 'bg-purple-950/90 border-purple-700/80 text-purple-200'
-        }`}>
-          <div className="text-[9px] text-purple-300 font-bold">
-            USER FOOTPRINT
-          </div>
-          <div className="text-[10px] font-extrabold text-white">
-            {affectedUsers.toLocaleString()} Accounts
+      {/* HTML Annotation */}
+      <Html position={[0, 1.0, 0]} center distanceFactor={14} style={{ pointerEvents: 'none' }}>
+        <div
+          className={`px-2 py-0.5 rounded-md text-[9px] font-mono whitespace-nowrap transition-all backdrop-blur-xs select-none ${
+            isContained
+              ? 'bg-[#24202b]/90 text-[#9aa5b1] border border-white/5 opacity-70'
+              : 'bg-[#2d2736]/90 text-[#e8a87c] border border-[#e8a87c]/40 shadow-sm'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-[#e8a87c] transform rotate-45" />
+            <span>{affectedUsers?.toLocaleString()} Users</span>
           </div>
         </div>
       </Html>
@@ -298,91 +275,73 @@ function AffectedUsersNode({ affectedUsers = 0, position, isContained, isSelecte
 }
 
 /**
- * Connecting Radial Edge with Containment Fade Transition
+ * Line representing lateral pathways and blast radius reachability.
  */
-function RadialEdge({ from = [0, 0, 0], to = [0, 0, 0], isContained = false }) {
-  const lineRef = useRef();
-
+function RadialEdge({ from, to, isContained }) {
+  const edgeColor = isContained ? THEME.p4 : THEME.warm;
   return (
     <Line
-      ref={lineRef}
       points={[from, to]}
-      color={isContained ? '#1e293b' : '#38bdf8'}
-      lineWidth={isContained ? 1 : 2.5}
-      transparent
-      opacity={isContained ? 0.15 : 0.7}
+      color={edgeColor}
+      lineWidth={isContained ? 1.0 : 2.2}
       dashed={isContained}
-      dashScale={2}
-      dashSize={0.5}
-      gapSize={0.5}
+      dashScale={isContained ? 2.0 : 0}
+      transparent={true}
+      opacity={isContained ? 0.25 : 0.6}
     />
   );
 }
 
 /**
- * Master ThreatMapScene Canvas Component
+ * 3D Blast-Radius Threat Map Canvas Viewport Component
  */
 export default function ThreatMapScene({
-  primaryAsset,
+  primaryAsset = null,
   connectedAssets = [],
   affectedUsers = 0,
   isContained = false,
   selectedEntity = null,
   onSelectEntity = () => {}
 }) {
-  // Calculate radiating 3D orbital positions
-  const { nodePositions, allEntities } = useMemo(() => {
-    const positions = [[0, 0, 0]]; // Center node
-    const entities = [{ ...primaryAsset, isCenter: true }];
-
+  // Compute positions radially around center
+  const nodePositions = useMemo(() => {
     const totalOuter = connectedAssets.length + (affectedUsers > 0 ? 1 : 0);
-    const radius = Math.max(4.8, Math.min(7.5, totalOuter * 1.5));
+    const positions = [[0, 0, 0]]; // Center node
 
-    connectedAssets.forEach((ast, idx) => {
-      const angle = (2 * Math.PI * idx) / (totalOuter || 1);
+    if (totalOuter === 0) return positions;
+
+    const radius = 5.8;
+    for (let i = 0; i < totalOuter; i++) {
+      const angle = (i / totalOuter) * Math.PI * 2;
       const x = Math.cos(angle) * radius;
-      const y = Math.sin(idx * 1.2) * 0.75;
       const z = Math.sin(angle) * radius;
+      const y = (i % 2 === 0 ? 0.4 : -0.4);
       positions.push([x, y, z]);
-      entities.push(ast);
-    });
-
-    if (affectedUsers > 0) {
-      const userAngle = (2 * Math.PI * connectedAssets.length) / (totalOuter || 1);
-      const ux = Math.cos(userAngle) * radius;
-      const uy = -0.5;
-      const uz = Math.sin(userAngle) * radius;
-      positions.push([ux, uy, uz]);
-      entities.push({ type: 'user_group', name: 'Affected User Accounts', affectedUsers });
     }
 
-    return { nodePositions: positions, allEntities: entities };
-  }, [primaryAsset, connectedAssets, affectedUsers]);
+    return positions;
+  }, [connectedAssets.length, affectedUsers]);
 
   return (
-    <div className="w-full h-full relative bg-[#07090e] overflow-hidden select-none">
+    <div className="w-full h-full relative bg-[#17141b] overflow-hidden select-none">
       <Canvas
-        camera={{ position: [0, 6, 14], fov: 45 }}
+        camera={{ position: [0, 8, 16], fov: 45 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
       >
-        <color attach="background" args={['#07090e']} />
+        <color attach="background" args={['#17141b']} />
 
-        {/* Ambient & Spotlight Lighting */}
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[15, 25, 20]} intensity={1.4} />
-        <directionalLight position={[-15, -10, -15]} intensity={0.5} color="#38bdf8" />
-        <pointLight position={[0, 2, 0]} intensity={1.2} distance={25} color={isContained ? '#10b981' : '#f43f5e'} />
+        {/* Ambient & Directional Lighting — Warm and balanced */}
+        <ambientLight intensity={0.7} color="#f5ede6" />
+        <directionalLight position={[12, 18, 12]} intensity={1.1} color="#fff6ed" />
+        <directionalLight position={[-12, -10, -12]} intensity={0.35} color="#5ec8c0" />
+        <pointLight position={[0, 2, 0]} intensity={0.65} distance={24} color="#e8a87c" />
 
-        {/* Concentric Threat Radar Rings */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -1.8, 0]}>
-          <ringGeometry args={[3.0, 3.05, 64]} />
-          <meshBasicMaterial color="#1e293b" side={THREE.DoubleSide} />
-        </mesh>
+        {/* Outer Perimeter Range Ring & Grid */}
         <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -1.8, 0]}>
           <ringGeometry args={[6.0, 6.05, 64]} />
-          <meshBasicMaterial color="#1e293b" side={THREE.DoubleSide} />
+          <meshBasicMaterial color="#362f40" side={THREE.DoubleSide} />
         </mesh>
-        <gridHelper args={[24, 24, '#1e293b', '#0b1120']} position={[0, -2.0, 0]} />
+        <gridHelper args={[24, 24, '#362f40', '#25202c']} position={[0, -2.0, 0]} />
 
         {/* Radial Edges connecting Center to Outer Nodes */}
         {connectedAssets.map((_, idx) => (
@@ -441,4 +400,3 @@ export default function ThreatMapScene({
     </div>
   );
 }
-

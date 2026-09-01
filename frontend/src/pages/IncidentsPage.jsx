@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import {
   ShieldAlert,
   Search,
-  Filter,
-  ArrowUpDown,
-  Network,
-  Database,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  GitMerge
 } from 'lucide-react';
-import { getPriorityStyles } from '../components/IncidentCard';
+import { getPriorityStyles } from '../utils/theme';
+import { getAssetPlainSubtitle } from '../utils/assets';
+import { formatMitreTechnique, getMitreDescription } from '../utils/mitre';
+import InfoTooltip from '../components/InfoTooltip';
 
 export default function IncidentsPage({ incidents = [], loading = false, onSelectIncident }) {
   const [filterPriority, setFilterPriority] = useState('ALL');
@@ -38,15 +38,15 @@ export default function IncidentsPage({ incidents = [], loading = false, onSelec
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-7xl mx-auto font-sans text-[#f0eae4]">
       {/* Top Header & Filter Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-[#0e1218] border border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-[#24202b] border border-white/10 shadow-md">
         <div>
-          <h1 className="font-mono text-base font-bold text-white tracking-wider flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-cyan-400" />
+          <h1 className="font-mono text-base font-bold text-[#f0eae4] tracking-wider flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-[#5ec8c0]" />
             INCIDENTS TRIAGE & INVESTIGATION QUEUE
           </h1>
-          <p className="text-xs text-slate-400 font-sans mt-0.5">
+          <p className="text-xs text-[#a69c93] font-sans mt-0.5">
             Full contextual security event clusters prioritized by composite blast radius and attack stage.
           </p>
         </div>
@@ -57,10 +57,10 @@ export default function IncidentsPage({ incidents = [], loading = false, onSelec
             <button
               key={p}
               onClick={() => setFilterPriority(p)}
-              className={`px-3 py-1 rounded-md transition font-bold ${
+              className={`px-3 py-1 rounded-lg transition-all duration-150 font-bold ${
                 filterPriority === p
-                  ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(6,182,212,0.4)]'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                  ? 'bg-[#5ec8c0] text-[#1c1921] shadow-[0_0_12px_rgba(94,200,192,0.3)]'
+                  : 'bg-[#1e1a24] text-[#a69c93] hover:text-[#f0eae4] hover:bg-[#373042]'
               }`}
             >
               {p}
@@ -72,22 +72,22 @@ export default function IncidentsPage({ incidents = [], loading = false, onSelec
       {/* Search & Sort Row */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 font-mono text-xs">
         <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-[#7d736b] absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by ID, asset hostname, user, or MITRE..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#0e1218] border border-slate-800 text-slate-200 placeholder:text-slate-600 focus:outline-hidden focus:border-cyan-500/60"
+            placeholder="Search by ID, asset hostname, user, or technique..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#24202b] border border-white/10 text-[#f0eae4] placeholder-[#7d736b] focus:outline-hidden focus:border-[#5ec8c0]/60 transition"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-slate-500">SORT BY:</span>
+          <span className="text-[#a69c93]">SORT BY:</span>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="p-1.5 rounded bg-[#0e1218] border border-slate-800 text-slate-300 focus:outline-hidden focus:border-cyan-500/60"
+            className="p-1.5 rounded-lg bg-[#24202b] border border-white/10 text-[#f0eae4] focus:outline-hidden focus:border-[#5ec8c0]/60"
           >
             <option value="score">Risk Score (Desc)</option>
             <option value="alerts">Correlated Alerts Count</option>
@@ -96,90 +96,138 @@ export default function IncidentsPage({ incidents = [], loading = false, onSelec
         </div>
       </div>
 
-      {/* Incidents Table / List */}
-      <div className="rounded-xl bg-[#0e1218] border border-slate-800 overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left font-mono text-xs">
-            <thead className="bg-[#111620] border-b border-slate-800 text-slate-400 uppercase text-[10px] tracking-wider">
-              <tr>
-                <th className="py-3 px-4">Priority</th>
-                <th className="py-3 px-4">Incident ID</th>
-                <th className="py-3 px-4">Risk Score</th>
-                <th className="py-3 px-4">Dominant Threat</th>
-                <th className="py-3 px-4">Primary Asset</th>
-                <th className="py-3 px-4">Chain Depth</th>
-                <th className="py-3 px-4">Blast Radius</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 text-slate-300">
-              {loading ? (
+      {/* Incidents Table View */}
+      <div className="rounded-xl border border-white/10 bg-[#24202b] overflow-hidden shadow-2xl">
+        {loading ? (
+          <div className="p-16 flex flex-col items-center justify-center gap-3 text-[#a69c93] font-mono text-xs">
+            <div className="w-8 h-8 border-2 border-[#5ec8c0]/20 border-t-[#5ec8c0] rounded-full animate-spin"></div>
+            <span>Fetching correlated incident catalog...</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-16 text-center text-[#7d736b] font-mono text-xs">
+            No security incidents matched the active filter criteria.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs">
+              <thead className="bg-[#1e1a24] text-[#a69c93] uppercase tracking-wider text-[10px] border-b border-white/10">
                 <tr>
-                  <td colSpan="8" className="text-center py-12 text-slate-500">
-                    Loading incident queue...
-                  </td>
+                  <th className="py-3 px-4">Priority</th>
+                  <th className="py-3 px-4">Incident ID</th>
+                  <th className="py-3 px-4">Primary Threat & Asset</th>
+                  <th className="py-3 px-4">
+                    <span className="flex items-center gap-1">
+                      <span>MITRE Technique</span>
+                      <InfoTooltip term="mitre" />
+                    </span>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <span className="flex items-center justify-center gap-1">
+                      <span>Chain</span>
+                      <InfoTooltip term="correlated_alerts" />
+                    </span>
+                  </th>
+                  <th className="py-3 px-4 text-center">
+                    <span className="flex items-center justify-center gap-1">
+                      <span>Blast</span>
+                      <InfoTooltip term="blast_radius" />
+                    </span>
+                  </th>
+                  <th className="py-3 px-4 text-right">
+                    <span className="flex items-center justify-end gap-1">
+                      <span>Composite Risk</span>
+                      <InfoTooltip term="base_risk" />
+                    </span>
+                  </th>
+                  <th className="py-3 px-4 text-center">Action</th>
                 </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="text-center py-12 text-slate-500">
-                    No incidents matched the selected filter criteria.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map(inc => {
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {filtered.map(inc => {
                   const pStyles = getPriorityStyles(inc.priority_bucket);
-                  const top = inc.alerts?.[0] || {};
+                  const dominantAlert = inc.alerts?.[0] || {};
+                  const assetSubtitle = getAssetPlainSubtitle(dominantAlert.asset);
+                  const isChain = (inc.alert_count || 1) >= 2;
+                  const mitreTechnique = dominantAlert.mitre_technique;
                   return (
                     <tr
                       key={inc.incident_id}
                       onClick={() => onSelectIncident(inc.incident_id)}
-                      className="hover:bg-[#151a24] cursor-pointer transition select-none group"
+                      className="hover:bg-[#2d2736] transition-colors cursor-pointer group"
                     >
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${pStyles.badge}`}>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${pStyles.badge}`}>
                           {inc.priority_bucket}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-bold text-white group-hover:text-cyan-400 transition">
+
+                      <td className="py-3 px-4 font-bold text-[#f0eae4] group-hover:text-[#5ec8c0] transition-colors whitespace-nowrap">
                         {inc.incident_id}
                       </td>
+
                       <td className="py-3 px-4">
+                        <div className="font-bold text-[#f0eae4] uppercase truncate max-w-xs">
+                          {dominantAlert.alert_type?.replace(/_/g, ' ') || 'Security Threat'}
+                        </div>
+                        <div className="text-[11px] text-[#a69c93] flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[#f0eae4]">{dominantAlert.asset || 'N/A'}</span>
+                          <span className="text-[#7d736b]">•</span>
+                          <span className="text-[#5ec8c0]/90 font-sans italic">{assetSubtitle}</span>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-[#5ec8c0] font-semibold truncate max-w-[190px]">
+                        {mitreTechnique ? (
+                          <span title={getMitreDescription(mitreTechnique)}>
+                            {formatMitreTechnique(mitreTechnique)}
+                          </span>
+                        ) : (
+                          <span className="text-[#7d736b]">N/A</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {isChain ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#e8a87c]/15 text-[#e8a87c] text-[10px] font-bold border border-[#e8a87c]/30">
+                            <GitMerge className="w-3 h-3" />
+                            <span>{inc.alert_count}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[#7d736b]">1</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap text-[#a69c93]">
+                        {inc.blast_radius?.assets || 1} host(s)
+                      </td>
+
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
                         <span className={`text-sm font-extrabold ${pStyles.score}`}>
                           {inc.score}
                         </span>
+                        <span className="text-[10px] text-[#7d736b] ml-1">/100</span>
                       </td>
-                      <td className="py-3 px-4 uppercase font-semibold text-slate-200">
-                        {top.alert_type?.replace(/_/g, ' ') || 'security_alert'}
-                      </td>
-                      <td className="py-3 px-4 text-slate-300">
-                        <div className="flex items-center gap-1.5">
-                          <Database className="w-3 h-3 text-slate-500 shrink-0" />
-                          <span className="truncate max-w-[140px]">{top.asset || 'host'}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700">
-                          <Network className="w-2.5 h-2.5 text-cyan-400" />
-                          {inc.alert_count} alert(s)
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-400">
-                        {inc.blast_radius?.assets || 1} asset(s)
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 text-[11px] font-semibold">
-                          Investigate <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectIncident(inc.incident_id);
+                          }}
+                          className="p-1 rounded hover:bg-white/10 text-[#a69c93] hover:text-[#5ec8c0] transition inline-flex items-center gap-1 text-[11px]"
+                        >
+                          <span>Investigate</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

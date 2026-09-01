@@ -2,35 +2,28 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Globe2,
-  Shield,
-  Layers,
-  Flame,
   Play,
   RotateCcw,
-  AlertTriangle,
-  Info,
-  Server,
-  Users,
   CheckCircle2,
   X
 } from 'lucide-react';
 import {
   getRankedIncidents,
   getIncidentChain,
-  getIncidentExplain,
   simulateContainment
 } from '../api/client';
 import ThreatMapScene from '../three/ThreatMapScene';
-import { STAGE_COLORS } from '../three/AttackChainScene';
-import { getPriorityStyles } from '../components/IncidentCard';
+import { getPriorityStyles } from '../utils/theme';
+import { getAssetPlainSubtitle } from '../utils/assets';
+import { getContainmentStepsNarration } from '../utils/narration';
+import InfoTooltip from '../components/InfoTooltip';
 
-export default function ThreatMapPage({ onSelectIncidentForDetail }) {
+export default function ThreatMapPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [incidents, setIncidents] = useState([]);
   const [selectedIncidentId, setSelectedIncidentId] = useState(searchParams.get('id') || '');
   const [chainData, setChainData] = useState(null);
-  const [explainData, setExplainData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -38,6 +31,7 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
   const [simulating, setSimulating] = useState(false);
   const [containmentResult, setContainmentResult] = useState(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
+  const [containmentStage, setContainmentStage] = useState(0); // 0: None, 1: Step 1, 2: Step 2, 3: Completed
 
   // Load ranked incidents list
   useEffect(() => {
@@ -64,7 +58,7 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
     }
   }, [searchParams]);
 
-  // Fetch chain and explain data when incident changes
+  // Fetch chain data when incident changes
   useEffect(() => {
     if (!selectedIncidentId) return;
 
@@ -73,15 +67,12 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
     setError(null);
     setContainmentResult(null);
     setSelectedEntity(null);
+    setContainmentStage(0);
 
-    Promise.all([
-      getIncidentChain(selectedIncidentId),
-      getIncidentExplain(selectedIncidentId)
-    ])
-      .then(([chain, explain]) => {
+    getIncidentChain(selectedIncidentId)
+      .then((chain) => {
         if (isMounted) {
           setChainData(chain);
-          setExplainData(explain);
           setLoading(false);
         }
       })
@@ -107,17 +98,29 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
     if (!selectedIncidentId) return;
     try {
       setSimulating(true);
+      setContainmentStage(1);
+
+      setTimeout(() => {
+        setContainmentStage(2);
+      }, 1600);
+
       const res = await simulateContainment(selectedIncidentId);
-      setContainmentResult(res);
+
+      setTimeout(() => {
+        setContainmentResult(res);
+        setContainmentStage(3);
+        setSimulating(false);
+      }, 3200);
     } catch (err) {
       console.error('Failed to simulate containment:', err);
-    } finally {
       setSimulating(false);
+      setContainmentStage(0);
     }
   };
 
   const handleReset = () => {
     setContainmentResult(null);
+    setContainmentStage(0);
   };
 
   const currentIncidentMeta = useMemo(() => {
@@ -160,7 +163,6 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
     });
 
     const assetList = Array.from(assetMap.values());
-    // Sort by criticality descending so highest criticality is the primary center node
     assetList.sort((a, b) => b.criticality - a.criticality);
 
     const primary = assetList[0] || { name: 'HOST-01', criticality: 50, type: 'workstation' };
@@ -175,27 +177,36 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
 
   const isContained = Boolean(containmentResult);
 
+  // Generate dynamic containment narration steps
+  const containmentSteps = useMemo(() => {
+    const assetName = primaryAsset?.name || 'PROD-DB-CUSTOMER-01';
+    const before = containmentResult?.before?.finalScore || currentIncidentMeta?.score || 98.5;
+    const after = containmentResult?.after?.finalScore || 42.1;
+    const red = containmentResult?.after?.riskReductionPercent || 57.2;
+    return getContainmentStepsNarration(assetName, totalAffectedUsers, before, after, red);
+  }, [primaryAsset, totalAffectedUsers, containmentResult, currentIncidentMeta]);
+
   return (
-    <div className="h-full flex flex-col space-y-4">
+    <div className="h-full flex flex-col space-y-4 max-w-7xl mx-auto font-sans text-[#f0eae4]">
       {/* Top Header & Selector Bar */}
-      <div className="p-4 rounded-xl bg-[#0e1218] border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+      <div className="p-4 rounded-xl bg-[#24202b] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-md">
         <div>
-          <h1 className="font-mono text-base font-bold text-white tracking-wider flex items-center gap-2">
-            <Globe2 className="w-5 h-5 text-cyan-400 animate-pulse" />
+          <h1 className="font-mono text-base font-bold text-[#f0eae4] tracking-wider flex items-center gap-2">
+            <Globe2 className="w-5 h-5 text-[#5ec8c0] animate-pulse" />
             3D BLAST-RADIUS INFRASTRUCTURE THREAT MAP
           </h1>
-          <p className="text-xs text-slate-400 font-sans mt-0.5">
+          <p className="text-xs text-[#a69c93] font-sans mt-0.5">
             Radial infrastructure topology mapping affected crown jewels, reachable nodes, and active containment impact.
           </p>
         </div>
 
         {/* Incident Selector Dropdown */}
         <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="text-slate-500 font-bold uppercase">Incident:</span>
+          <span className="text-[#a69c93] font-bold uppercase">Incident:</span>
           <select
             value={selectedIncidentId}
             onChange={(e) => handleSelectIncident(e.target.value)}
-            className="p-2 rounded-lg bg-[#0a0d12] border border-slate-800 text-slate-200 focus:outline-hidden focus:border-cyan-500/60"
+            className="p-2 rounded-lg bg-[#1e1a24] border border-white/10 text-[#f0eae4] focus:outline-hidden focus:border-[#5ec8c0]/60 transition"
           >
             {incidents.map(inc => (
               <option key={inc.incident_id} value={inc.incident_id}>
@@ -208,20 +219,20 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
 
       {/* Incident Metadata & Containment Bar */}
       {currentIncidentMeta && (
-        <div className="p-3 rounded-lg bg-[#111620] border border-slate-800 flex flex-wrap items-center justify-between gap-3 font-mono text-xs shrink-0">
+        <div className="p-3.5 rounded-xl bg-[#2d2736] border border-white/10 flex flex-wrap items-center justify-between gap-3 font-mono text-xs shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
             {(() => {
               const pStyles = getPriorityStyles(currentIncidentMeta.priority_bucket);
               return (
-                <span className={`px-2.5 py-0.5 rounded font-bold border ${pStyles.badge}`}>
+                <span className={`px-2.5 py-0.5 rounded-md font-bold border ${pStyles.badge}`}>
                   {currentIncidentMeta.priority_bucket}
                 </span>
               );
             })()}
-            <span className="font-bold text-white text-sm">
+            <span className="font-bold text-[#f0eae4] text-sm">
               {currentIncidentMeta.incident_id}
             </span>
-            <span className="text-slate-400 uppercase">
+            <span className="text-[#a69c93] uppercase font-semibold">
               {currentIncidentMeta.alerts?.[0]?.alert_type?.replace(/_/g, ' ')}
             </span>
           </div>
@@ -232,15 +243,15 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
               <button
                 onClick={handleSimulate}
                 disabled={simulating}
-                className="px-3.5 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 disabled:opacity-50 text-white font-bold tracking-wider transition flex items-center gap-1.5 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                className="px-3.5 py-1.5 rounded-lg bg-[#5ec8c0] hover:bg-[#4eb8b0] active:bg-[#3ea8a0] disabled:opacity-50 text-[#1c1921] font-bold tracking-wider transition flex items-center gap-1.5 shadow-[0_0_12px_rgba(94,200,192,0.25)]"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>{simulating ? 'SIMULATING...' : 'SIMULATE CONTAINMENT'}</span>
+                <span>{simulating ? 'CONTAINING IN REAL TIME...' : 'SIMULATE CONTAINMENT'}</span>
               </button>
             ) : (
               <button
                 onClick={handleReset}
-                className="px-3.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 font-bold tracking-wider transition flex items-center gap-1.5 border border-slate-700"
+                className="px-3.5 py-1.5 rounded-lg bg-[#1e1a24] hover:bg-white/5 active:bg-white/10 text-[#f0eae4] font-bold tracking-wider transition flex items-center gap-1.5 border border-white/10"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>RESET SIMULATION</span>
@@ -251,14 +262,14 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
       )}
 
       {/* Main 3D Viewport & HUD Overlay Area */}
-      <div className="flex-1 min-h-[440px] rounded-xl border border-slate-800 overflow-hidden relative flex flex-col">
+      <div className="flex-1 min-h-[440px] rounded-xl border border-white/10 overflow-hidden relative flex flex-col shadow-2xl">
         {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-[#07090e] text-slate-400">
-            <div className="w-8 h-8 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-[#17141b] text-[#a69c93]">
+            <div className="w-9 h-9 border-2 border-[#5ec8c0]/20 border-t-[#5ec8c0] rounded-full animate-spin"></div>
             <span className="text-xs font-mono">Loading 3D threat map topology...</span>
           </div>
         ) : error ? (
-          <div className="flex-1 flex items-center justify-center p-6 bg-[#07090e] text-rose-300 text-xs font-mono">
+          <div className="flex-1 flex items-center justify-center p-6 bg-[#17141b] text-[#e88080] text-xs font-mono">
             {error}
           </div>
         ) : (
@@ -274,86 +285,92 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
             />
 
             {/* Orbit Controls Guidance Hint */}
-            <div className="absolute top-3 left-3 px-2.5 py-1 rounded bg-[#0a0d12]/80 border border-slate-800 text-[10px] font-mono text-slate-400 pointer-events-none backdrop-blur-xs">
+            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-[#24202b]/80 border border-white/10 text-[10px] font-mono text-[#a69c93] pointer-events-none backdrop-blur-xs">
               🖱️ Drag to orbit • Scroll to zoom • Click node to inspect
             </div>
 
-            {/* HTML Legend Overlay */}
-            <div className="absolute bottom-3 left-3 p-3 rounded-lg bg-[#0a0d12]/90 border border-slate-800/90 backdrop-blur-md font-mono text-[10px] space-y-1.5 pointer-events-auto shadow-2xl">
-              <div className="text-slate-400 font-bold uppercase tracking-wider mb-1">
-                TOPOLOGY ENTITY KEY
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-rose-500"></span>
-                  <span className="text-slate-200 font-bold">Center Node: Crown Jewel Primary Asset</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-                  <span className="text-slate-300">Outer Nodes: Downstream Reachable Assets (Size = Criticality)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 bg-purple-400 transform rotate-45"></span>
-                  <span className="text-purple-300">Octahedron: Total Affected User Accounts Footprint</span>
-                </div>
-                <div className="pt-1 border-t border-slate-800 flex items-center gap-2 text-emerald-400">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                  <span>Green Emissive / Muted Gray = Contained State</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Containment Impact Overlay Card (Triggered by Simulate Containment) */}
-            {containmentResult && (
-              <div className="absolute top-3 left-1/2 transform -translate-x-1/2 w-full max-w-lg p-4 rounded-xl bg-[#0e1218]/95 border border-emerald-500/80 backdrop-blur-md shadow-[0_0_24px_rgba(16,185,129,0.25)] space-y-3 font-mono text-xs pointer-events-auto animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold uppercase tracking-wider">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>CONTAINMENT SIMULATION IMPACT</span>
+            {/* DYNAMIC SEQUENTIAL CONTAINMENT NARRATION HUD (Active during / after simulation) */}
+            {containmentStage > 0 && (
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-full max-w-xl p-4 rounded-2xl bg-[#24202b]/95 border border-[#8fbf9f]/80 shadow-[0_0_30px_rgba(143,191,159,0.3)] backdrop-blur-md z-20 animate-fadeIn font-sans space-y-2.5 select-none ring-1 ring-[#8fbf9f]/40">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div className="flex items-center gap-2 text-[#8fbf9f] font-bold uppercase tracking-wider text-xs">
+                    <CheckCircle2 className="w-4 h-4 text-[#8fbf9f] animate-pulse" />
+                    <span>CONTAINMENT NARRATIVE PROGRESSION</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold">
-                    Risk Reduction: -{containmentResult.after.riskReductionPercent}%
+                  <span className="px-2 py-0.5 rounded bg-[#8fbf9f]/15 text-[#8fbf9f] border border-[#8fbf9f]/35 text-[10px] font-mono font-bold">
+                    STEP {containmentStage} OF 3
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">PRE-CONTAINMENT</div>
-                    <div className="text-lg font-extrabold text-rose-400 mt-1">
-                      {containmentResult.before.finalScore} <span className="text-xs font-bold">({containmentResult.before.priorityBucket})</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      Blast: {containmentResult.before.blastRadius.assets} assets • {containmentResult.before.blastRadius.users} users
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/50">
-                    <div className="text-[10px] text-emerald-400 font-bold uppercase">POST-CONTAINMENT</div>
-                    <div className="text-lg font-extrabold text-emerald-400 mt-1">
-                      {containmentResult.after.finalScore} <span className="text-xs font-bold">({containmentResult.after.priorityBucket})</span>
-                    </div>
-                    <div className="text-[10px] text-emerald-300/80 mt-0.5">
-                      Blast: 0 uncontained assets (Neutralized)
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-slate-400 font-sans leading-relaxed text-center">
-                  * Live 3D nodes representing {containmentResult.containedEntities?.isolatedAssets?.length || 0} host(s) have been visually decoupled and isolated.
+                <div className="space-y-1.5 text-xs">
+                  {containmentSteps.map(st => {
+                    const isPassed = containmentStage >= st.step;
+                    const isCurrent = containmentStage === st.step;
+                    return (
+                      <div
+                        key={st.step}
+                        className={`p-2 rounded-lg flex items-start gap-2.5 transition-all duration-300 ${
+                          isCurrent
+                            ? 'bg-[#8fbf9f]/15 border border-[#8fbf9f]/50 text-[#8fbf9f] font-medium'
+                            : isPassed
+                            ? 'bg-[#1e1a24] border border-white/10 text-[#f0eae4]'
+                            : 'opacity-40 text-[#7d736b]'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                          isCurrent ? 'bg-[#8fbf9f] animate-ping' : isPassed ? 'bg-[#8fbf9f]' : 'bg-[#7d736b]'
+                        }`}></span>
+                        <span className="leading-snug">{st.text}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+            {/* HTML Legend Overlay */}
+            <div className="absolute bottom-3 left-3 p-3 rounded-xl bg-[#24202b]/90 border border-white/10 backdrop-blur-md font-mono text-[10px] space-y-1.5 pointer-events-auto shadow-2xl">
+              <div className="text-[#a69c93] font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span>TOPOLOGY ENTITY KEY</span>
+                <InfoTooltip text="Entities representing critical infrastructure targets and affected user credentials." />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#e88080]"></span>
+                  <span className="text-[#f0eae4] font-bold">Center Node: Crown Jewel Primary Asset</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#5ec8c0]"></span>
+                  <span className="text-[#a69c93]">Outer Nodes: Downstream Reachable Assets</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 bg-[#e8a87c] transform rotate-45"></span>
+                  <span className="text-[#e8a87c]">Octahedron: User Accounts Footprint</span>
+                </div>
+                <div className="pt-1 border-t border-white/10 flex items-center gap-2 text-[#8fbf9f]">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#8fbf9f]"></span>
+                  <span>Sage Green / Muted = Contained State</span>
+                </div>
+              </div>
+            </div>
+
             {/* Selected Asset Inspector Popover */}
             {selectedEntity && (
-              <div className="absolute top-3 right-3 w-72 p-4 rounded-xl bg-[#0e1218]/95 border border-cyan-500/50 backdrop-blur-md shadow-2xl space-y-2.5 font-mono text-xs pointer-events-auto animate-fadeIn">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="font-bold text-white truncate max-w-[180px]">
-                    {selectedEntity.name}
-                  </span>
+              <div className="absolute top-3 right-3 w-76 p-4 rounded-xl bg-[#24202b]/95 border border-[#5ec8c0]/50 backdrop-blur-md shadow-2xl space-y-2.5 font-mono text-xs pointer-events-auto animate-fadeIn text-[#f0eae4]">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div>
+                    <span className="font-bold text-[#f0eae4] truncate max-w-[180px] block">
+                      {selectedEntity.name}
+                    </span>
+                    {selectedEntity.type !== 'user_group' && (
+                      <span className="text-[10px] font-sans text-[#5ec8c0]/90 italic">
+                        {getAssetPlainSubtitle(selectedEntity.name)}
+                      </span>
+                    )}
+                  </div>
                   <button
                     onClick={() => setSelectedEntity(null)}
-                    className="text-slate-500 hover:text-white transition"
+                    className="text-[#a69c93] hover:text-[#f0eae4] transition"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -362,16 +379,16 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
                 {selectedEntity.type === 'user_group' ? (
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">ENTITY:</span>
-                      <span className="text-purple-300 font-bold">User Identity Group</span>
+                      <span className="text-[#a69c93]">ENTITY:</span>
+                      <span className="text-[#e8a87c] font-bold">User Identity Group</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">AFFECTED USERS:</span>
-                      <span className="text-white font-bold">{selectedEntity.affectedUsers?.toLocaleString()}</span>
+                      <span className="text-[#a69c93]">AFFECTED USERS:</span>
+                      <span className="text-[#f0eae4] font-bold">{selectedEntity.affectedUsers?.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">STATUS:</span>
-                      <span className={isContained ? 'text-slate-400 line-through' : 'text-rose-400'}>
+                      <span className="text-[#a69c93]">STATUS:</span>
+                      <span className={isContained ? 'text-[#a69c93] line-through' : 'text-[#e88080] font-bold'}>
                         {isContained ? 'Credentials Revoked' : 'Active Sessions'}
                       </span>
                     </div>
@@ -379,20 +396,20 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
                 ) : (
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">ASSET TYPE:</span>
-                      <span className="text-slate-200 font-semibold">{selectedEntity.type || 'workstation'}</span>
+                      <span className="text-[#a69c93]">ASSET TYPE:</span>
+                      <span className="text-[#f0eae4] font-semibold">{selectedEntity.type || 'workstation'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">CRITICALITY:</span>
-                      <span className="text-cyan-400 font-bold">{selectedEntity.criticality} / 100</span>
+                      <span className="text-[#a69c93]">CRITICALITY:</span>
+                      <span className="text-[#5ec8c0] font-bold">{selectedEntity.criticality} / 100</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">DOMINANT STAGE:</span>
-                      <span className="text-amber-400 font-bold uppercase">{selectedEntity.dominantStage || 'touched'}</span>
+                      <span className="text-[#a69c93]">DOMINANT STAGE:</span>
+                      <span className="text-[#efa95f] font-bold uppercase">{selectedEntity.dominantStage || 'touched'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">CONTAINMENT:</span>
-                      <span className={isContained ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      <span className="text-[#a69c93]">CONTAINMENT:</span>
+                      <span className={isContained ? 'text-[#8fbf9f] font-bold' : 'text-[#e88080] font-bold'}>
                         {isContained ? '● ISOLATED' : '○ ACTIVE ROUTING'}
                       </span>
                     </div>
@@ -406,4 +423,3 @@ export default function ThreatMapPage({ onSelectIncidentForDetail }) {
     </div>
   );
 }
-

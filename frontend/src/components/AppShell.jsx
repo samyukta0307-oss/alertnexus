@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldAlert,
@@ -11,16 +11,28 @@ import {
   Activity,
   Cpu,
   RefreshCw,
-  AlertTriangle
+  Eye,
+  Play,
+  Zap
 } from 'lucide-react';
-import { getAlerts, getMlStatus, setMlStatus, rebuildIncidents } from '../api/client';
+import { getMlStatus, setMlStatus, rebuildIncidents } from '../api/client';
+import { useViewMode } from '../context/ViewModeContext';
+import InfoTooltip from './InfoTooltip';
 
-export default function AppShell({ children, alertCount, onAlertsRefresh, onRebuildSuccess }) {
+export default function AppShell({
+  children,
+  alertCount,
+  onAlertsRefresh,
+  onRebuildSuccess,
+  onOpenReplay,
+  onInjectLiveAlert,
+  injectingLiveAlert = false
+}) {
+  const { viewMode, setViewMode } = useViewMode();
   const [mlEnabled, setMlEnabledState] = useState(true);
   const [mlLoading, setMlLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildStatus, setRebuildStatus] = useState(null);
-  const location = useLocation();
 
   useEffect(() => {
     getMlStatus()
@@ -70,26 +82,26 @@ export default function AppShell({ children, alertCount, onAlertsRefresh, onRebu
   ];
 
   return (
-    <div className="flex h-screen w-full bg-[#0a0c10] text-slate-100 overflow-hidden select-none">
+    <div className="flex h-screen w-full bg-[#1c1921] text-[#f0eae4] overflow-hidden select-none font-sans">
       {/* Left Sidebar */}
-      <aside className="w-64 flex flex-col bg-[#0e1217] border-r border-slate-800/80 shrink-0">
+      <aside className="w-64 flex flex-col bg-[#24202b] border-r border-white/10 shrink-0">
         {/* Brand Header */}
-        <div className="p-4 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-9 h-9 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+        <div className="p-4 border-b border-white/10 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#5ec8c0]/15 border border-[#5ec8c0]/40 flex items-center justify-center text-[#5ec8c0] shadow-[0_0_14px_rgba(94,200,192,0.2)]">
             <Activity className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <div className="font-mono font-bold tracking-wider text-sm text-white flex items-center gap-1.5">
-              CYBERSHIELD <span className="text-cyan-400 text-xs px-1 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/50">SOC</span>
+            <div className="font-mono font-bold tracking-wider text-sm text-[#f0eae4] flex items-center gap-1.5">
+              CYBERSHIELD <span className="text-[#5ec8c0] text-xs px-1.5 py-0.5 rounded bg-[#5ec8c0]/15 border border-[#5ec8c0]/40">SOC</span>
             </div>
-            <div className="text-[10px] tracking-widest text-slate-400 uppercase font-mono">
+            <div className="text-[10px] tracking-widest text-[#a69c93] uppercase font-mono">
               Command Center
             </div>
           </div>
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
           {navItems.map(item => {
             const Icon = item.icon;
             return (
@@ -97,10 +109,10 @@ export default function AppShell({ children, alertCount, onAlertsRefresh, onRebu
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium transition-all ${
+                  `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 ${
                     isActive
-                      ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-[0_0_12px_rgba(6,182,212,0.15)] font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                      ? 'bg-[#5ec8c0]/15 text-[#5ec8c0] border border-[#5ec8c0]/40 shadow-[0_0_14px_rgba(94,200,192,0.18)] font-semibold'
+                      : 'text-[#a69c93] hover:text-[#f0eae4] hover:bg-white/5 border border-transparent'
                   }`
                 }
               >
@@ -109,7 +121,7 @@ export default function AppShell({ children, alertCount, onAlertsRefresh, onRebu
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#1e1a24] text-[#5ec8c0] border border-[#5ec8c0]/30 font-bold">
                     {item.badge}
                   </span>
                 )}
@@ -119,32 +131,35 @@ export default function AppShell({ children, alertCount, onAlertsRefresh, onRebu
         </nav>
 
         {/* Sidebar Footer Controls */}
-        <div className="p-3 border-t border-slate-800/80 bg-[#0c0f14] space-y-2 text-xs">
+        <div className="p-3.5 border-t border-white/10 bg-[#1e1a24] space-y-2.5 text-xs">
           {/* Rebuild Incidents Action */}
           <button
             onClick={handleRebuild}
             disabled={rebuilding}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 disabled:opacity-50 text-slate-200 text-xs font-mono font-medium border border-slate-700 transition"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#2d2736] hover:bg-[#373042] active:bg-[#3f384c] disabled:opacity-50 text-[#f0eae4] text-xs font-mono font-medium border border-white/10 transition duration-150"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${rebuilding ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
-            <span>{rebuilding ? 'Rebuilding Graph...' : 'Rebuild Incidents'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-[#5ec8c0] ${rebuilding ? 'animate-spin' : ''}`} />
+            <span>{rebuilding ? 'Rebuilding Graph...' : 'Re-correlate Graph'}</span>
           </button>
 
           {rebuildStatus && (
-            <div className={`text-[11px] p-1.5 rounded font-mono text-center ${
+            <div className={`p-2 rounded text-[11px] font-mono text-center font-bold ${
               rebuildStatus.success
-                ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/50'
-                : 'bg-rose-950/60 text-rose-300 border border-rose-800/50'
+                ? 'bg-[#8fbf9f]/15 text-[#8fbf9f] border border-[#8fbf9f]/40'
+                : 'bg-[#e88080]/15 text-[#e88080] border border-[#e88080]/40'
             }`}>
               {rebuildStatus.success ? `Rebuilt into ${rebuildStatus.count} incidents` : 'Rebuild failed'}
             </div>
           )}
 
           {/* Engine Status info */}
-          <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+          <div className="pt-1 flex items-center justify-between text-[11px] text-[#a69c93] font-mono">
             <span>MySQL 8.0 Engine</span>
-            <span className="flex items-center gap-1 text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span className="flex items-center gap-1.5 text-[#8fbf9f] font-bold">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8fbf9f] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#8fbf9f] shadow-[0_0_8px_#8fbf9f]"></span>
+              </span>
               SYNCED
             </span>
           </div>
@@ -152,54 +167,112 @@ export default function AppShell({ children, alertCount, onAlertsRefresh, onRebu
       </aside>
 
       {/* Main Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#0c0e12]">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#1c1921]">
         {/* Top Operational Header */}
-        <header className="h-14 px-6 bg-[#0e1217] border-b border-slate-800/80 flex items-center justify-between shrink-0">
+        <header className="h-14 px-6 bg-[#24202b] border-b border-white/10 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]"></span>
-              <span className="font-mono text-xs font-semibold tracking-wider text-slate-200">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8fbf9f] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#8fbf9f] shadow-[0_0_8px_#8fbf9f]"></span>
+              </span>
+              <span className="font-mono text-xs font-semibold tracking-wider text-[#f0eae4]">
                 SYSTEM ONLINE
               </span>
             </div>
-            <div className="h-4 w-px bg-slate-800"></div>
-            <div className="text-xs text-slate-400 font-mono">
+            <div className="h-4 w-px bg-white/10"></div>
+            <div className="text-xs text-[#a69c93] font-mono hidden sm:block">
               CyberShield Autonomous SOC Engine v2.0
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Demo Mode Actions: Run Live Demo & Inject Alert */}
+            {onOpenReplay && (
+              <button
+                type="button"
+                onClick={onOpenReplay}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-linear-to-r from-[#e8a87c] to-[#5ec8c0] hover:brightness-110 text-[#1c1921] text-xs font-mono font-bold tracking-wider shadow-[0_0_14px_rgba(94,200,192,0.25)] transition"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span className="hidden sm:inline">Run Live Demo</span>
+              </button>
+            )}
+
+            {onInjectLiveAlert && (
+              <button
+                type="button"
+                onClick={onInjectLiveAlert}
+                disabled={injectingLiveAlert}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#e8a87c]/15 hover:bg-[#e8a87c]/25 text-[#e8a87c] border border-[#e8a87c]/40 text-xs font-mono font-bold tracking-wider transition disabled:opacity-50"
+                title="Simulate real-time telemetry arrival"
+              >
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span className="hidden md:inline">{injectingLiveAlert ? 'Injecting...' : 'Inject Alert'}</span>
+              </button>
+            )}
+
+            {/* Density Mode Switch (Simple View / Analyst View) */}
+            <div className="flex items-center p-0.5 rounded-lg bg-[#1e1a24] border border-white/10 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => setViewMode('simple')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold tracking-wider transition-all duration-200 ${
+                  viewMode === 'simple'
+                    ? 'bg-[#5ec8c0]/20 text-[#5ec8c0] border border-[#5ec8c0]/40 shadow-[0_0_10px_rgba(94,200,192,0.2)]'
+                    : 'text-[#a69c93] hover:text-[#f0eae4] border border-transparent'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5 text-[#5ec8c0]" />
+                <span>Simple View</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('analyst')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold tracking-wider transition-all duration-200 ${
+                  viewMode === 'analyst'
+                    ? 'bg-[#5ec8c0]/20 text-[#5ec8c0] border border-[#5ec8c0]/40 shadow-[0_0_10px_rgba(94,200,192,0.2)]'
+                    : 'text-[#a69c93] hover:text-[#f0eae4] border border-transparent'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5 text-[#5ec8c0]" />
+                <span>Analyst View</span>
+              </button>
+            </div>
+
             {/* Live Telemetry KPI */}
-            <div className="flex items-center gap-2 px-3 py-1 rounded bg-slate-900 border border-slate-800 font-mono text-xs">
-              <span className="text-slate-400">Live Ingested Alerts:</span>
-              <span className="text-cyan-400 font-bold">{alertCount !== undefined ? alertCount : '...'}</span>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#2d2736] border border-white/10 font-mono text-xs">
+              <span className="text-[#a69c93]">Alerts:</span>
+              <span className="text-[#5ec8c0] font-bold">{alertCount !== undefined ? alertCount : '...'}</span>
+              <InfoTooltip term="telemetry_alerts" />
             </div>
 
             {/* Runtime ML Anomaly Toggle */}
-            <div className="flex items-center gap-2 px-3 py-1 rounded bg-slate-900 border border-slate-800 font-mono text-xs">
-              <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-400">ML Anomaly Signal:</span>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#2d2736] border border-white/10 font-mono text-xs">
+              <Cpu className="w-3.5 h-3.5 text-[#5ec8c0]" />
+              <span className="text-[#a69c93] hidden md:inline">ML Signal:</span>
               <button
                 onClick={handleToggleMl}
                 disabled={mlLoading}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider transition ${
+                className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider transition duration-150 ${
                   mlEnabled
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700'
+                    ? 'bg-[#5ec8c0]/20 text-[#5ec8c0] border border-[#5ec8c0]/40 hover:bg-[#5ec8c0]/30 shadow-[0_0_8px_rgba(94,200,192,0.2)]'
+                    : 'bg-[#1e1a24] text-[#a69c93] border border-white/10 hover:bg-[#373042]'
                 }`}
               >
                 {mlLoading ? 'UPDATING...' : mlEnabled ? '● ENABLED' : '○ DISABLED'}
               </button>
+              <InfoTooltip term="ml_signal" />
             </div>
           </div>
         </header>
 
-        {/* Dynamic Page Container */}
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* Dynamic Route Content */}
+        <main className="flex-1 overflow-y-auto p-6 bg-[#1c1921]">
           {children}
         </main>
       </div>
     </div>
   );
 }
-

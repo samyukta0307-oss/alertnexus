@@ -1,17 +1,10 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Line, Html, Float } from '@react-three/drei';
+import { OrbitControls, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { THEME } from '../utils/theme';
 
-export const STAGE_COLORS = {
-  reconnaissance: '#3b82f6',       // Blue
-  initial_access: '#06b6d4',       // Cyan
-  privilege_escalation: '#f97316', // Orange
-  lateral_movement: '#f59e0b',     // Amber / Gold
-  exfiltration: '#ef4444',         // Red
-  persistence: '#a855f7',          // Purple
-  none: '#64748b'                  // Gray
-};
+export const STAGE_COLORS = THEME.stages;
 
 export function getStageColor(stage) {
   const norm = (stage || 'none').trim().toLowerCase();
@@ -39,12 +32,11 @@ function CameraRig({ positions = [] }) {
 
     const maxDim = Math.max(sizeVec.x, sizeVec.y, sizeVec.z, 4);
     const fov = camera.fov * (Math.PI / 180);
-    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5;
-    cameraZ = Math.max(cameraZ, 8);
+    let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+    cameraZ *= 1.4; // Comfort padding
 
-    camera.position.set(center.x, center.y + maxDim * 0.35, center.z + cameraZ);
+    camera.position.set(center.x, center.y + 1.5, center.z + cameraZ);
     camera.lookAt(center);
-    camera.updateProjectionMatrix();
 
     if (controlsRef.current) {
       controlsRef.current.target.copy(center);
@@ -55,43 +47,55 @@ function CameraRig({ positions = [] }) {
   return (
     <OrbitControls
       ref={controlsRef}
-      enableDamping
-      dampingFactor={0.05}
-      rotateSpeed={0.8}
-      zoomSpeed={0.9}
-      minDistance={3}
-      maxDistance={50}
-      autoRotate={true}
-      autoRotateSpeed={0.6}
+      enablePan={true}
+      enableZoom={true}
+      enableRotate={true}
+      maxDistance={40}
+      minDistance={2}
+      dampingFactor={0.08}
     />
   );
 }
 
 /**
- * Individual Node representing an alert in the chronological attack chain.
+ * Attack Node Mesh component representing an alert event in 3D.
  */
-function AttackNode({ alert, index, total, position, isSelected, onSelect }) {
-  const [hovered, setHovered] = useState(false);
+function AttackNode({
+  alert,
+  index,
+  total,
+  position,
+  isSelected,
+  onSelect
+}) {
   const meshRef = useRef();
-  const haloRef = useRef();
+  const [hovered, setHovered] = useState(false);
 
-  const color = useMemo(() => getStageColor(alert.attack_stage), [alert.attack_stage]);
-  // Subtle scaling with severity: radius between 0.45 and 0.65
-  const baseRadius = 0.45 + ((alert.severity || 50) / 100) * 0.2;
+  const stageColor = getStageColor(alert.attack_stage);
+  const isIoc = Boolean(alert.ioc_match);
 
-  useFrame((state, delta) => {
-    if (haloRef.current) {
-      haloRef.current.rotation.z += delta * 1.5;
-    }
+  // Subtle floating and pulse animation
+  useFrame(({ clock }) => {
     if (meshRef.current) {
-      const targetScale = isSelected ? 1.3 : hovered ? 1.2 : 1.0;
-      meshRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 10);
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.y = t * 0.5 + index * 0.2;
+      meshRef.current.rotation.x = Math.sin(t * 0.4 + index) * 0.15;
+
+      if (isSelected || hovered) {
+        const scale = 1.0 + Math.sin(t * 4) * 0.08;
+        meshRef.current.scale.set(scale, scale, scale);
+      } else {
+        meshRef.current.scale.set(1, 1, 1);
+      }
     }
   });
 
+  // Determine geometry based on severity / stage
+  const nodeRadius = 0.5 + (alert.severity ? alert.severity / 250 : 0.2);
+
   return (
     <group position={position}>
-      {/* Main Alert Sphere */}
+      {/* Primary 3D Sphere Node */}
       <mesh
         ref={meshRef}
         onClick={(e) => {
@@ -101,62 +105,74 @@ function AttackNode({ alert, index, total, position, isSelected, onSelect }) {
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
-          document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={() => {
-          setHovered(false);
-          document.body.style.cursor = 'auto';
-        }}
+        onPointerOut={() => setHovered(false)}
       >
-        <sphereGeometry args={[baseRadius, 32, 32]} />
+        <sphereGeometry args={[nodeRadius, 32, 32]} />
         <meshStandardMaterial
-          color={color}
-          emissive={isSelected || hovered ? color : '#0f172a'}
-          emissiveIntensity={isSelected ? 1.2 : hovered ? 0.9 : 0.3}
-          roughness={0.2}
-          metalness={0.6}
+          color={stageColor}
+          emissive={stageColor}
+          emissiveIntensity={isSelected ? 0.7 : hovered ? 0.45 : 0.25}
+          roughness={0.25}
+          metalness={0.65}
         />
       </mesh>
 
-      {/* IOC Match Outer Halo Ring */}
-      {alert.ioc_match && (
-        <group ref={haloRef}>
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[baseRadius * 1.45, baseRadius * 1.7, 32]} />
-            <meshBasicMaterial
-              color="#f43f5e"
-              side={THREE.DoubleSide}
-              transparent
-              opacity={0.85}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* Selected Indicator Ring */}
-      {isSelected && (
+      {/* Threat Intel IOC Hit Halo Ring */}
+      {isIoc && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[baseRadius * 1.8, baseRadius * 2.0, 32]} />
-          <meshBasicMaterial color="#38bdf8" side={THREE.DoubleSide} />
+          <ringGeometry args={[nodeRadius * 1.3, nodeRadius * 1.5, 32]} />
+          <meshBasicMaterial
+            color={THEME.p1}
+            side={THREE.DoubleSide}
+            transparent={true}
+            opacity={0.8}
+          />
         </mesh>
       )}
 
-      {/* Step & Stage Label Billboard */}
-      <Html position={[0, baseRadius + 0.45, 0]} center distanceFactor={14} className="pointer-events-none select-none">
-        <div className="flex flex-col items-center">
-          <div className="px-2 py-0.5 rounded-md bg-[#0a0d12]/90 border border-slate-700/80 shadow-lg text-center backdrop-blur-xs whitespace-nowrap">
-            <div className="font-mono text-[9px] font-bold tracking-wider text-cyan-400">
-              STEP {index + 1}
-            </div>
-            <div className="font-mono text-[10px] font-bold text-white uppercase">
-              {alert.attack_stage || 'event'}
-            </div>
-          </div>
-          {alert.ioc_match && (
-            <span className="mt-0.5 text-[8px] font-mono font-bold px-1 rounded bg-rose-950/90 text-rose-300 border border-rose-700">
-              IOC MATCH
+      {/* Selected Indicator Outer Ring */}
+      {isSelected && (
+        <mesh rotation={[0, 0, 0]}>
+          <ringGeometry args={[nodeRadius * 1.55, nodeRadius * 1.75, 32]} />
+          <meshBasicMaterial
+            color={THEME.teal}
+            side={THREE.DoubleSide}
+            transparent={true}
+            opacity={0.9}
+          />
+        </mesh>
+      )}
+
+      {/* Floating HTML Annotation Label */}
+      <Html
+        position={[0, nodeRadius + 0.5, 0]}
+        center
+        distanceFactor={14}
+        style={{ pointerEvents: 'none' }}
+      >
+        <div
+          className={`px-2 py-1 rounded-md text-[10px] font-mono whitespace-nowrap transition-all duration-200 backdrop-blur-xs select-none ${
+            isSelected
+              ? 'bg-[#373042] text-[#5ec8c0] border border-[#5ec8c0] shadow-[0_0_12px_rgba(94,200,192,0.3)] font-bold'
+              : hovered
+              ? 'bg-[#2d2736] text-[#f0eae4] border border-[#e8a87c] shadow-lg'
+              : 'bg-[#24202b]/90 text-[#a69c93] border border-white/10'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-2 h-2 rounded-full inline-block shrink-0"
+              style={{ backgroundColor: stageColor }}
+            />
+            <span className="font-bold">Step {index + 1}:</span>
+            <span className="truncate max-w-[140px] uppercase font-semibold">
+              {alert.attack_stage || alert.alert_type}
             </span>
-          )}
+          </div>
+          <div className="text-[9px] text-[#a69c93] truncate max-w-[160px]">
+            {alert.asset}
+          </div>
         </div>
       </Html>
     </group>
@@ -164,35 +180,33 @@ function AttackNode({ alert, index, total, position, isSelected, onSelect }) {
 }
 
 /**
- * Connective Chronological Edge Lines with flow pulse
+ * Spline connecting chronological nodes with pulsating attack flow particles.
  */
 function AttackEdges({ positions = [] }) {
   if (positions.length < 2) return null;
 
   return (
     <group>
-      {/* Primary Connecting Line */}
-      <Line
-        points={positions}
-        color="#38bdf8"
-        lineWidth={3}
-        transparent
-        opacity={0.7}
-      />
-      {/* Subtle glowing halo line */}
-      <Line
-        points={positions}
-        color="#0284c7"
-        lineWidth={6}
-        transparent
-        opacity={0.25}
-      />
+      {positions.slice(0, -1).map((startPos, i) => {
+        const endPos = positions[i + 1];
+        return (
+          <Line
+            key={`edge-${i}`}
+            points={[startPos, endPos]}
+            color={THEME.warm}
+            lineWidth={2.5}
+            dashed={false}
+            transparent={true}
+            opacity={0.55}
+          />
+        );
+      })}
     </group>
   );
 }
 
 /**
- * Master AttackChainScene Canvas Component
+ * Main 3D Attack Chain Canvas Viewport Component
  */
 export default function AttackChainScene({
   alerts = [],
@@ -221,25 +235,22 @@ export default function AttackChainScene({
   }, [sortedAlerts]);
 
   return (
-    <div className="w-full h-full relative bg-[#07090e] overflow-hidden select-none">
+    <div className="w-full h-full relative bg-[#17141b] overflow-hidden select-none">
       <Canvas
         camera={{ position: [0, 2, 12], fov: 45 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
-        onPointerDown={(e) => {
-          // If clicked canvas background, do not unselect automatically
-        }}
       >
-        <color attach="background" args={['#07090e']} />
+        <color attach="background" args={['#17141b']} />
 
-        {/* Ambient & Directional Lighting */}
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 20, 15]} intensity={1.2} />
-        <directionalLight position={[-10, -10, -10]} intensity={0.4} color="#38bdf8" />
-        <pointLight position={[0, 0, 0]} intensity={0.8} distance={20} color="#06b6d4" />
+        {/* Ambient & Directional Lighting — Warm & balanced */}
+        <ambientLight intensity={0.7} color="#f5ede6" />
+        <directionalLight position={[10, 20, 15]} intensity={1.1} color="#fff6ed" />
+        <directionalLight position={[-10, -10, -10]} intensity={0.35} color="#5ec8c0" />
+        <pointLight position={[0, 0, 0]} intensity={0.65} distance={22} color="#e8a87c" />
 
-        {/* Subtle Background Grid Plane */}
+        {/* Subtle Background Grid Plane in warm charcoal */}
         <gridHelper
-          args={[30, 30, '#1e293b', '#0f172a']}
+          args={[30, 30, '#362f40', '#25202c']}
           position={[0, -2.5, 0]}
         />
 
@@ -265,4 +276,3 @@ export default function AttackChainScene({
     </div>
   );
 }
-
