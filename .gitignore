@@ -3,3 +3,7 @@
 *.log
 dist/
 .vite/
+
+.env
+.env.txt
+*.env
